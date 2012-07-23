@@ -1,0 +1,5 @@
+* is it possible to distinguish between pipes and normal stdout?
+* --unstructured / -U forces unstructured output
+
+* {success: "true", type: "System.POSIX.File", data: "..."}
+* {success: "false", errorType: "WrongDataType", errorText: "Wrong type has been submitted"}
