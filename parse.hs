@@ -17,7 +17,7 @@ import Text.JSON
 
 -- Units
 
-data Type = IntType | StringType
+data Type = IntType | StringType deriving Show
 data Value = IntValue Int | StringValue String deriving (Show, Eq, Ord)
 
 compareValues :: Value -> Value -> Either String Ordering
@@ -25,25 +25,12 @@ compareValues (IntValue a) (IntValue b) = Right $ compare a b
 compareValues (StringValue a) (StringValue b) = Right $ compare a b
 compareValues c1 c2 = Left $ "Type mismatch: (" ++ show c1 ++ ") - (" ++ show c2 ++ ")"
 
-parseValue :: String -> Value
-parseValue x = IntValue 5
+-- Parsing
 
-parseUnit :: String -> Type -> Value
-parseUnit s IntType = IntValue $ read s
-parseUnit s StringType = StringValue s
+data Operand = Operand Type Value | KeyPath [String] deriving Show
+data Expr = And Expr Expr | Or Expr Expr | Equal Operand Operand | Greater Operand Operand | Less Operand Operand deriving Show
 
-exprType :: String -> String -> Bool
-exprType s1 s2 = let
-	p1 = parseValue s1
-	p2 = parseValue s2
-	in p1 == p2
-
--- Expressions
-
-data Operand = Operand Type Value | KeyPath [String]
-
-operand :: Parser Operand
-operand = operandKeyPath <|> operandInt <|> operandString
+-- Operands
 
 operandKey :: [String] -> Parser [String]
 operandKey keys = try $ do
@@ -51,7 +38,7 @@ operandKey keys = try $ do
 	(char '.' >> operandKey (p:keys)) <|> (return (p:keys))
 
 operandKeyPath :: Parser Operand
-operandKeyPath = KeyPath <$> (operandKey [])
+operandKeyPath = try $ KeyPath <$> (operandKey [])
 
 operandInt :: Parser Operand
 operandInt = try $ do
@@ -60,13 +47,18 @@ operandInt = try $ do
 
 operandString :: Parser Operand
 operandString = try $ do
+	char '\''
 	p <- many1 alphaNum
+	char '\''
 	return $ Operand StringType $ StringValue p
 
-data Expr = And Expr Expr | Or Expr Expr | Equal String String | Greater String String | Less String String deriving Show
+operandValue :: Parser Operand
+operandValue = operandInt <|> operandString
 
-idntf :: Parser String
-idntf = try $ many1 $ alphaNum <|> char '.'
+operand :: Parser Operand
+operand = operandKeyPath <|> operandValue
+
+-- Operators
 
 op :: String -> Parser String
 op str = try $ do
@@ -75,14 +67,13 @@ op str = try $ do
 	spaces
 	return s
 
-expr :: Parser Expr
-expr = chainl1 (parseEq Equal "=" <|> parseEq Greater ">" <|> parseEq Less "<") (parseAnd <|> parseOr)
+-- Expressions
 
-parseEq :: (String -> String -> Expr) -> String -> Parser Expr
+parseEq :: (Operand -> Operand -> Expr) -> String -> Parser Expr
 parseEq ctr opstr = try $ do
-	e1 <- idntf
+	e1 <- operand
 	op opstr
-	e2 <- idntf
+	e2 <- operand
 	return $ ctr e1 e2
 
 parseAnd :: Parser (Expr -> Expr -> Expr)
@@ -91,13 +82,26 @@ parseAnd = op "&&" >> return And
 parseOr :: Parser (Expr -> Expr -> Expr)
 parseOr = op "||" >> return Or
 
+expr :: Parser Expr
+expr = chainl1 (parseEq Equal "=" <|> parseEq Greater ">" <|> parseEq Less "<") (parseAnd <|> parseOr)
+
+-- Evaluation
+
+extractValue :: JSValue -> Operand -> Either String Value
+extractValue (JSObject obj) (KeyPath [key]) = case valFromObj key obj of
+	Ok v -> case parse operandValue "" v of
+		Right (Operand t v) -> Right v
+		Left e -> Left $ show e
+	_ -> Left $ "Extracting value failed: " ++ key
+extractValue (JSObject obj) (KeyPath (key:keys)) = case valFromObj key obj of
+	Ok obj' -> extractValue obj' $ KeyPath keys
+	_ -> Left $ "Extracting value failed: " ++ key
+extractValue _ (Operand t v) = Right v
+
 eval :: JSValue -> Expr -> Either String Bool
-eval (JSObject obj) (Equal e1 e2) = case valFromObj e1 obj of
-	Ok val -> case compareValues (parseValue val) (parseValue e2) of
-		Right EQ -> Right True
-		Right _ -> Right False
-		Left error -> Left error
-	_ -> Left $ "Value " ++ e1 ++ " could not be extracted"
+eval value (Equal e1 e2) = case (compareValues <$> extractValue value e1 <*> extractValue value e2) of
+	Right ord -> liftM2 (==) ord $ Right EQ
+	Left e -> Left e
 eval obj (And s1 s2) = (&&) <$> eval obj s1 <*> eval obj s2
 eval obj (Or s1 s2) = (||) <$> eval obj s1 <*> eval obj s2
 
@@ -114,7 +118,7 @@ main = do
 	if isCharacterDevice status
 		then putStrLn ""
 		else putStrLn ""
-	let parsed = parse expr "source" "path = cool && size = 456"
+	let parsed = parse expr "" "path = 'cool' && size = 456"
 	case parsed of
 		Right e -> putStrLn $ show $ eval (makeObj
 			[("path", JSString $ toJSString "cool"),
