@@ -15,16 +15,26 @@ data Select a = Select String String deriving Show
 data Expr = And Expr Expr | Or Expr Expr | Token String deriving Show
 
 identifier :: Parser String
-identifier = many1 $ letter <|> (char '.')
+identifier = try $ many1 $ letter <|> char '.'
+
+op :: String -> Parser String
+op str = try $ do
+	spaces
+	s <- string str
+	spaces
+	return s
 
 expr :: Parser Expr
-expr = parseAnd <|> parseOr <|> liftM Token identifier 
+expr = chainl1 parseToken (parseAnd <|> parseOr)
 
-parseAnd :: Parser Expr
-parseAnd = liftM2 And expr (string " && " >> expr)
+parseToken :: Parser Expr
+parseToken = Token <$> identifier
 
-parseOr :: Parser Expr
-parseOr = liftM2 And expr (string " || " >> expr)
+parseAnd :: Parser (Expr -> Expr -> Expr)
+parseAnd = op "&&" >> return And
+
+parseOr :: Parser (Expr -> Expr -> Expr)
+parseOr = op "||" >> return Or
 
 parseSelect :: Parser (Select String)
 parseSelect = do
@@ -34,7 +44,7 @@ parseSelect = do
 	source <- identifier
 	return $ Select field source
 
-main = print $ parse expr "source" "asd && sdfff"
+main = print $ parse expr "source" "aaas && tokenA && tokenB || tokenC && tokenD"
 
 parseArgs :: [String] -> IO ()
 parseArgs ["-R"] = print "YES"
