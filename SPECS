@@ -3,3 +3,5 @@
 
 * {success: "true", type: "System.POSIX.File", data: "..."}
 * {success: "false", errorType: "WrongDataType", errorText: "Wrong type has been submitted"}
+
+* on error input -> output un/structured error
