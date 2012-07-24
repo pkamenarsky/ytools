@@ -56,7 +56,7 @@ operandValue :: Parser Operand
 operandValue = operandInt <|> operandString
 
 operand :: Parser Operand
-operand = operandKeyPath <|> operandValue
+operand = try operandKeyPath <|> operandValue
 
 -- Operators
 
