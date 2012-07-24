@@ -34,8 +34,8 @@ data Expr = And Expr Expr | Or Expr Expr | Equal Operand Operand | Greater Opera
 
 operandKey :: [String] -> Parser [String]
 operandKey keys = try $ do
-	p <- many1 alphaNum
-	(char '.' >> operandKey (p:keys)) <|> (return (p:keys))
+	p <- many1 letter
+	(char '.' >> operandKey (keys ++ [p])) <|> (return (keys ++ [p]))
 
 operandKeyPath :: Parser Operand
 operandKeyPath = try $ KeyPath <$> (operandKey [])
@@ -47,6 +47,11 @@ operandInt = try $ do
 
 operandString :: Parser Operand
 operandString = try $ do
+	p <- many1 alphaNum
+	return $ Operand StringType $ StringValue p
+
+operandQuotedString :: Parser Operand
+operandQuotedString = try $ do
 	char '\''
 	p <- many1 alphaNum
 	char '\''
@@ -56,7 +61,7 @@ operandValue :: Parser Operand
 operandValue = operandInt <|> operandString
 
 operand :: Parser Operand
-operand = try operandKeyPath <|> operandValue
+operand = operandKeyPath <|> operandInt <|> operandQuotedString
 
 -- Operators
 
@@ -118,9 +123,11 @@ main = do
 	if isCharacterDevice status
 		then putStrLn ""
 		else putStrLn ""
-	let parsed = parse expr "" "path = 'cool' && size = 456"
+	let parsed = parse expr "" "path = 'cool' && size = 456 && permissions.read = 'true'"
 	case parsed of
 		Right e -> putStrLn $ show $ eval (makeObj
 			[("path", JSString $ toJSString "cool"),
-			("size", JSString $ toJSString "456")]) e
+			("size", JSString $ toJSString "456"),
+			("permissions", makeObj
+				[("read", JSString $ toJSString "true")])]) e
 		Left e -> putStrLn $ "Parse error: " ++ show e
