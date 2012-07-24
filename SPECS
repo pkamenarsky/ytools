@@ -5,3 +5,27 @@
 * {success: "false", errorType: "WrongDataType", errorText: "Wrong type has been submitted"}
 
 * on error input -> output un/structured error
+
+* different tools - yls, yfilter, ysort, ygroup, yfold, yformat
+* composability - combine small scripts into bigger scripts / "functions"
+	* can we curry? :>
+
+* typed json?
+	* if not - runtime type "inference" - 1M, true, yesterday, +
+
+* examples
+	* yls -R | yfilter "permissions.oread == true && size > 1M" | yfold + size
+	* yls | yfold "\a x -> a + size x" path
+	* yls | yfilter "file path == '*ASCII*'"
+
+* permissions.oread == true && size > 1M
+	* \path size permissions.oread ... -> permissions.oread == true && size > 1M
+* \a x -> a + size x
+	* a + size x
+
+* isascii.sh:
+	* yeval "\path -> file path == '*ASCII*'"
+	* then: yls | yfilter isascii.sh
+
+* differentiate between stdin and command line arguments
+* how to carry human readable output along the pipes?
