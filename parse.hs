@@ -14,8 +14,6 @@ import Text.ParserCombinators.Parsec.Char()
 import Text.ParserCombinators.Parsec.Language
 import qualified Text.ParserCombinators.Parsec.Token as T
 
-import Text.ParserCombinators.Parsec.Number
-
 import Text.JSON
 
 -- Units
@@ -36,7 +34,7 @@ data Expr = And Expr Expr | Or Expr Expr | Equal Operand Operand | Greater Opera
 
 lexer = T.makeTokenParser emptyDef {
 	identLetter = char '.' <|> alphaNum,
-	reservedOpNames = ["&&", "||", "=", "<", ">"]
+	reservedOpNames = ["&&", "||", "=", "==", "<", ">"]
 }
 
 lexeme = T.lexeme lexer
@@ -76,7 +74,8 @@ parseOp str ctr = reservedOp str >> return ctr
 
 expr :: Parser Expr
 expr = chainl1 (parens expr <|>
-	parseEq Equal "=" <|>
+	(try (parseEq Equal "==") <|>
+		parseEq Equal "=") <|>
 	parseEq Greater ">" <|>
 	parseEq Less "<")
 	(parseOp "&&" And <|> parseOp "||" Or)
