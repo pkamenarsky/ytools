@@ -11,6 +11,8 @@ import System.Posix.IO
 import Text.ParserCombinators.Parsec
 import Text.ParserCombinators.Parsec.Combinator()
 import Text.ParserCombinators.Parsec.Char()
+import Text.ParserCombinators.Parsec.Language
+import qualified Text.ParserCombinators.Parsec.Token as T
 
 import Text.ParserCombinators.Parsec.Number
 
@@ -18,7 +20,7 @@ import Text.JSON
 
 -- Units
 
-data Value = IntValue Integer | FloatValue Float | StringValue String deriving (Show, Eq, Ord)
+data Value = IntValue Integer | FloatValue Double | StringValue String deriving (Show, Eq, Ord)
 
 compareValues :: Value -> Value -> Either String Ordering
 compareValues (IntValue a) (IntValue b) = Right $ compare a b
@@ -32,87 +34,59 @@ data Expr = And Expr Expr | Or Expr Expr | Equal Operand Operand | Greater Opera
 
 -- Operands
 
-operandKey :: [String] -> Parser [String]
-operandKey keys = try $ do
-	p <- many1 letter
-	(char '.' >> operandKey (keys ++ [p])) <|> (return (keys ++ [p]))
+lexer = T.makeTokenParser emptyDef {
+	identLetter = char '.' <|> alphaNum,
+	reservedOpNames = ["&&", "||", "=", "<", ">"]
+}
 
-operandKeyPath :: Parser Operand
-operandKeyPath = try $ KeyPath <$> (operandKey [])
+lexeme = T.lexeme lexer
+identifier = T.identifier lexer
+naturalOrFloat = T.naturalOrFloat lexer
+reservedOp = T.reservedOp lexer
+parens = T.parens lexer
 
-operandInt :: Parser Operand
-operandInt = try $ do
-	p <- many1 digit
-	return $ Operand $ IntValue $ read p
-
-operandString :: Parser Operand
-operandString = try $ do
-	p <- many1 alphaNum
-	return $ Operand $ StringValue p
-
-operandValue :: Parser Operand
-operandValue = operandInt <|> operandString
-
-operand :: Parser Operand
-operand = operandKeyPath <|> operandInt <|> between (char '\'') (char '\'') operandString
-
---
-
-literal = many1 anyChar
-float = floating3 True
-end = eof >> return ""
-delim p = try $ p <* (many1 space <|> end)
+nof :: Parser Value
+nof = do
+	e <- naturalOrFloat
+	return $ either IntValue FloatValue e
 
 objValue :: Parser Value
-objValue = 
-	IntValue <$> delim int <|>
-	FloatValue <$> delim float <|>
-	StringValue <$> delim literal
+objValue = try
+	(nof <* eof) <|>
+	StringValue <$> (many1 anyChar <* eof)
 
 exprValue :: Parser Operand
 exprValue =
-	KeyPath <$> delim (key []) <|>
-	(Operand . IntValue) <$> delim int <|>
-	(Operand . FloatValue) <$> delim float <|>
-	(Operand . StringValue) <$> delim (between (char '\'') (char '\'') (many1 $ satisfy (/= '\'')))
+	KeyPath <$> (lexeme $ key []) <|>
+	Operand <$> nof <|>
+	(Operand . StringValue) <$> lexeme (between (char '\'') (char '\'') (many1 $ satisfy (/= '\'')))
 	where
 		key :: [String] -> Parser [String]
 		key keys = try $ do
 			p <- many1 letter
 			(char '.' >> key (keys ++ [p])) <|> (return (keys ++ [p]))
 
--- Operators
-
-op :: String -> Parser String
-op str = try $ do
-	spaces
-	s <- string str
-	spaces
-	return s
-
 -- Expressions
 
 parseEq :: (Operand -> Operand -> Expr) -> String -> Parser Expr
-parseEq ctr opstr = try $ ctr <$> operand <* op opstr <*> operand
+parseEq ctr opstr = ctr <$> exprValue <* reservedOp opstr <*> exprValue
 
-parseBrackets :: Parser Expr
-parseBrackets = try $ char '(' *> expr <* char ')'
-
-parseAnd :: Parser (Expr -> Expr -> Expr)
-parseAnd = op "&&" >> return And
-
-parseOr :: Parser (Expr -> Expr -> Expr)
-parseOr = op "||" >> return Or
+parseOp :: String -> a -> Parser a
+parseOp str ctr = reservedOp str >> return ctr
 
 expr :: Parser Expr
-expr = chainl1 (parseBrackets <|> parseEq Equal "=" <|> parseEq Greater ">" <|> parseEq Less "<") (parseAnd <|> parseOr)
+expr = chainl1 (parens expr <|>
+	parseEq Equal "=" <|>
+	parseEq Greater ">" <|>
+	parseEq Less "<")
+	(parseOp "&&" And <|> parseOp "||" Or)
 
 -- Evaluation
 
 extractValue :: JSValue -> Operand -> Either String Value
 extractValue (JSObject obj) (KeyPath [key]) = case valFromObj key obj of
-	Ok v -> case parse operandValue "" v of
-		Right (Operand v') -> Right v'
+	Ok v -> case parse objValue "" v of
+		Right v' -> Right v'
 		Left e -> Left $ show e
 	_ -> Left $ "Extracting value failed: " ++ key
 extractValue (JSObject obj) (KeyPath (key:keys)) = case valFromObj key obj of
