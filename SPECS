@@ -29,3 +29,9 @@
 
 * differentiate between stdin and command line arguments
 * how to carry human readable output along the pipes?
+
+* expr types: regexp, int, float, bool, date
+* value types: string, int, float
+
+* parens!
+* schema!
