@@ -16,21 +16,9 @@ import Text.JSON
 
 import Schema
 
--- Units
-
-data Value = IntValue Integer | FloatValue Double | StringValue String deriving (Show, Eq, Ord)
-
-compareValues :: Value -> Value -> Either String Ordering
-compareValues (IntValue a) (IntValue b) = Right $ compare a b
-compareValues (StringValue a) (StringValue b) = Right $ compare a b
-compareValues c1 c2 = Left $ "Type mismatch: (" ++ show c1 ++ ") - (" ++ show c2 ++ ")"
-
 -- Parsing
 
-data Operand = Operand Value | KeyPath [String] deriving Show
-data Expr = And Expr Expr | Or Expr Expr | Equal Operand Operand | Greater Operand Operand | Less Operand Operand deriving Show
-
--- Operands
+data Expr = And Expr Expr | Or Expr Expr | Equal LValue RValue | Greater LValue RValue | Less LValue RValue deriving Show
 
 lexer = T.makeTokenParser emptyDef {
 	identLetter = char '.' <|> alphaNum,
@@ -39,35 +27,24 @@ lexer = T.makeTokenParser emptyDef {
 
 lexeme = T.lexeme lexer
 identifier = T.identifier lexer
-naturalOrFloat = T.naturalOrFloat lexer
 reservedOp = T.reservedOp lexer
 parens = T.parens lexer
 
-nof :: Parser Value
-nof = do
-	e <- naturalOrFloat
-	return $ either IntValue FloatValue e
+lvalue :: Parser LValue
+lvalue = LKeyPath <$> (lexeme $ key []) where
+	key :: [String] -> Parser [String]
+	key keys = try $ do
+		p <- many1 letter
+		(char '.' >> key (keys ++ [p])) <|> (return (keys ++ [p]))
 
-objValue :: Parser Value
-objValue = try
-	(nof <* eof) <|>
-	StringValue <$> (many1 anyChar <* eof)
-
-exprValue :: Parser Operand
-exprValue =
-	KeyPath <$> (lexeme $ key []) <|>
-	Operand <$> nof <|>
-	(Operand . StringValue) <$> lexeme (between (char '\'') (char '\'') (many1 $ satisfy (/= '\'')))
-	where
-		key :: [String] -> Parser [String]
-		key keys = try $ do
-			p <- many1 letter
-			(char '.' >> key (keys ++ [p])) <|> (return (keys ++ [p]))
+rvalue :: Parser RValue
+rvalue = RString <$> identifier <|>
+	RString <$> lexeme (between (char '\'') (char '\'') (many1 $ satisfy (/= '\'')))
 
 -- Expressions
 
-parseEq :: (Operand -> Operand -> Expr) -> String -> Parser Expr
-parseEq ctr opstr = ctr <$> exprValue <* reservedOp opstr <*> exprValue
+parseEq :: (LValue -> RValue -> Expr) -> String -> Parser Expr
+parseEq ctr opstr = ctr <$> lvalue <* reservedOp opstr <*> rvalue
 
 parseOp :: String -> a -> Parser a
 parseOp str ctr = reservedOp str >> return ctr
@@ -82,23 +59,20 @@ expr = chainl1 (parens expr <|>
 
 -- Evaluation
 
-extractValue :: JSValue -> Operand -> Either String Value
-extractValue (JSObject obj) (KeyPath [key]) = case valFromObj key obj of
-	Ok v -> case parse objValue "" v of
-		Right v' -> Right v'
-		Left e -> Left $ show e
+extractValue :: JSValue -> LValue -> Either String String
+extractValue (JSObject obj) (LKeyPath [key]) = case valFromObj key obj of
+	Ok v -> Right v
 	_ -> Left $ "Extracting value failed: " ++ key
-extractValue (JSObject obj) (KeyPath (key:keys)) = case valFromObj key obj of
-	Ok obj' -> extractValue obj' $ KeyPath keys
+extractValue (JSObject obj) (LKeyPath (key:keys)) = case valFromObj key obj of
+	Ok obj' -> extractValue obj' (LKeyPath keys)
 	_ -> Left $ "Extracting value failed: " ++ key
-extractValue _ (Operand v) = Right v
 
-eval :: JSValue -> Expr -> Either String Bool
-eval value (Equal e1 e2) = case (compareValues <$> extractValue value e1 <*> extractValue value e2) of
-	Right ord -> liftM2 (==) ord $ Right EQ
+eval :: JSValue -> Expr -> (String -> Ordering) -> Either String Bool
+eval value (Equal e1 e2) cmpFn = case cmpFn <$> extractValue value e1 of
+	Right ord -> Right $ EQ == ord
 	Left e -> Left e
-eval obj (And s1 s2) = (&&) <$> eval obj s1 <*> eval obj s2
-eval obj (Or s1 s2) = (||) <$> eval obj s1 <*> eval obj s2
+eval obj (And s1 s2) cmpFn = (&&) <$> eval obj s1 cmpFn <*> eval obj s2 cmpFn
+eval obj (Or s1 s2) cmpFn = (||) <$> eval obj s1 cmpFn <*> eval obj s2 cmpFn
 
 -- main
 
@@ -120,5 +94,5 @@ main = do
 			[("path", JSString $ toJSString "cool"),
 			("size", JSString $ toJSString "456"),
 			("permissions", makeObj
-				[("read", JSString $ toJSString "true")])]) e
+				[("read", JSString $ toJSString "true")])]) e (\x -> undefined)
 		Left e -> putStrLn $ "Parse error: " ++ show e

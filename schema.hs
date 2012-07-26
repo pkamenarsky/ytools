@@ -7,8 +7,8 @@ import Data.Typeable
 
 data TypeEnum = IntType | FloatType | BoolType | DateType | StringType deriving (Enum, Show, Eq)
 
-data LValue = LValue KeyPath TypeEnum
-data RValue = RString String | RKeyPath KeyPath TypeEnum
+data LValue = LKeyPath KeyPath deriving (Eq, Show)
+data RValue = RString String | RKeyPath KeyPath deriving (Eq, Show)
 
 type KeyPath = [String]
 
@@ -43,12 +43,12 @@ lookupKP _ _ = Left $ "Invalid keypath"
 
 -- Schemaless cmpFn?
 
-cmpFn :: TypeEnum -> String -> (String -> Ordering) -- (JSValue -> Ordering)
-cmpFn StringType s = \s' -> compare s s'
+cmpFn :: TypeEnum -> String -> (String -> Either String Ordering) -- (JSValue -> Ordering)
+cmpFn StringType s = \s' -> Right $ compare s s'
 -- cmpFn IntType s = let i = read s :: Int in p where
 -- 		p (JSInteger i') = compare i i'
 -- 		p _ = error "Type mismatch"
-cmpFn IntType s = let i = read s :: Int in \s' -> compare i $ read s'
-cmpFn FloatType s = let f = read s :: Float in \s' -> compare f $ read s'
+cmpFn IntType s = let i = read s :: Int in \s' -> Right $ compare i $ read s'
+cmpFn FloatType s = let f = read s :: Float in \s' -> Right $ compare f $ read s'
 cmpFn t s = error $ "Type mismatch: " ++ s ++ " is not a " ++ show t
 

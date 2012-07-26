@@ -35,3 +35,5 @@
 
 * parens!
 * schema!
+
+* ymove, yremove, ycopy, ymodify (modify any keypath)
