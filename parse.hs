@@ -41,8 +41,6 @@ rvalue :: Parser RValue
 rvalue = RString <$> identifier <|>
 	RString <$> lexeme (between (char '\'') (char '\'') (many1 $ satisfy (/= '\'')))
 
--- Expressions
-
 parseEq :: (LValue -> RValue -> Expr) -> String -> Parser Expr
 parseEq ctr opstr = ctr <$> lvalue <* reservedOp opstr <*> rvalue
 
@@ -68,11 +66,21 @@ extractValue (JSObject obj) (LKeyPath (key:keys)) = case valFromObj key obj of
 	_ -> Left $ "Extracting value failed: " ++ key
 
 eval :: JSValue -> Expr -> (String -> Ordering) -> Either String Bool
-eval value (Equal e1 e2) cmpFn = case cmpFn <$> extractValue value e1 of
+eval obj (Equal e1 e2) cmpFn = case cmpFn <$> extractValue obj e1 of
 	Right ord -> Right $ EQ == ord
 	Left e -> Left e
 eval obj (And s1 s2) cmpFn = (&&) <$> eval obj s1 cmpFn <*> eval obj s2 cmpFn
 eval obj (Or s1 s2) cmpFn = (||) <$> eval obj s1 cmpFn <*> eval obj s2 cmpFn
+
+makeEvalFn :: Schema -> Expr -> (JSValue -> Either String Bool)
+makeEvalFn schema (Equal e1 e2) = let f = cmpFn schema e1 e2 in
+	\value -> case f <$> extractValue value e1 of
+		Right ord -> (==) <$> ord <*> (return EQ)
+		Left e -> Left e
+makeEvalFn schema (And e1 e2) = let
+	f1 = makeEvalFn schema e1
+	f2 = makeEvalFn schema e2 in
+		\value -> (&&) <$> f1 value <*> f2 value
 
 -- main
 
@@ -88,11 +96,12 @@ main = do
 	if isCharacterDevice status
 		then putStrLn ""
 		else putStrLn ""
-	let parsed = parse expr "" "path = 'cool' && size = 456 && permissions.read = 'true'"
-	case parsed of
-		Right e -> putStrLn $ show $ eval (makeObj
-			[("path", JSString $ toJSString "cool"),
-			("size", JSString $ toJSString "456"),
-			("permissions", makeObj
-				[("read", JSString $ toJSString "true")])]) e (\x -> undefined)
+	let pexp = parse expr "" "path = 'cool' && size = 456 && permissions.read = 'true'"
+	case pexp of
+		Right pexp' -> let cmpFn = makeEvalFn lsSchema pexp' in
+			putStrLn $ show $ cmpFn (makeObj
+				[("path", JSString $ toJSString "cool"),
+				("size", JSString $ toJSString "456"),
+				("permissions", makeObj
+					[("read", JSString $ toJSString "true")])])
 		Left e -> putStrLn $ "Parse error: " ++ show e

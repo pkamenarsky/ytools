@@ -43,12 +43,13 @@ lookupKP _ _ = Left $ "Invalid keypath"
 
 -- Schemaless cmpFn?
 
-cmpFn :: TypeEnum -> String -> (String -> Either String Ordering) -- (JSValue -> Ordering)
-cmpFn StringType s = \s' -> Right $ compare s s'
+cmpFn :: Schema -> LValue -> RValue -> (String -> Either String Ordering)
+cmpFn = undefined
+-- cmpFn StringType s = \s' -> Right $ compare s s'
 -- cmpFn IntType s = let i = read s :: Int in p where
 -- 		p (JSInteger i') = compare i i'
 -- 		p _ = error "Type mismatch"
-cmpFn IntType s = let i = read s :: Int in \s' -> Right $ compare i $ read s'
-cmpFn FloatType s = let f = read s :: Float in \s' -> Right $ compare f $ read s'
-cmpFn t s = error $ "Type mismatch: " ++ s ++ " is not a " ++ show t
+-- cmpFn IntType s = let i = read s :: Int in \s' -> Right $ compare i $ read s'
+-- cmpFn FloatType s = let f = read s :: Float in \s' -> Right $ compare f $ read s'
+-- cmpFn t s = error $ "Type mismatch: " ++ s ++ " is not a " ++ show t
 
