@@ -36,4 +36,12 @@
 * parens!
 * schema!
 
+* -fls = pipe output through yformat -ls
+	* yfind | yfilter 'mtime > 11:20' | yformat -ls
+	* yfind | yfilter -fls 'mtime > 11:20'
+
+* type inference:
+	* 'path = * && mtime > 11:20'
+	* 'mtime > yesterday'
+
 * ymove, yremove, ycopy, ymodify (modify any keypath)

@@ -1,11 +1,15 @@
 module Schema where
 
+import Control.Applicative
 import Control.Monad
 
 import Data.Data
 import Data.Typeable
 
+import Text.JSON
+
 data TypeEnum = IntType | FloatType | BoolType | DateType | StringType deriving (Enum, Show, Eq)
+data Typed a = Typed TypeEnum a
 
 data LValue = LKeyPath KeyPath deriving (Eq, Show)
 data RValue = RString String | RKeyPath KeyPath deriving (Eq, Show)
@@ -41,10 +45,24 @@ lookupKP _ _ = Left $ "Invalid keypath"
 -- in later versions), i.e: cmpFn :: LValue -> RValue -> (JSObject -> Ordering)
 -- cmpFn is going to be useful for ysort, ygroup etc too.
 
--- Schemaless cmpFn?
+safeRead :: Read a => String -> String -> Either String a
+safeRead str msg = case reads str of
+	[] -> Left $ str ++ " not an " ++ msg
+	(_, y:ys):xs -> Left $ str ++ " not an " ++ msg
+	[(a, [])] -> Right a
 
-cmpFn :: Schema -> LValue -> RValue -> (String -> Either String Ordering)
-cmpFn = undefined
+cmpFn :: Typed LValue -> Typed RValue -> Either String (JSValue -> Either String Ordering)
+--cmpFn (Typed IntType _) (Typed _ (RString rstr)) = case safeRead rstr "integer" :: (Either String Int) of
+	--Right rstr' -> Right $ \lstr -> compare <$> safeRead lstr "integer" <*> return rstr'
+	--Left e -> Left e
+cmpFn (Typed IntType _) (Typed IntType (RString rstr)) = do
+	r <- safeRead rstr "integer" :: Either String Int
+	return cmp where
+		cmp (JSRational _ r') = Right $ compare r r'
+		cmp _ = Left $ "Type mismatch"
+	-- return $ \lstr -> compare <$> safeRead lstr "integer" <*> return rstr'
+
+
 -- cmpFn StringType s = \s' -> Right $ compare s s'
 -- cmpFn IntType s = let i = read s :: Int in p where
 -- 		p (JSInteger i') = compare i i'
