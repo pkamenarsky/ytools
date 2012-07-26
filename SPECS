@@ -44,4 +44,6 @@
 	* 'path = * && mtime > 11:20'
 	* 'mtime > yesterday'
 
+* fix unconsumed parser error
+
 * ymove, yremove, ycopy, ymodify (modify any keypath)

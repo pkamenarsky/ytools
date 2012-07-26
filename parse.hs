@@ -103,10 +103,13 @@ main = do
 	if isCharacterDevice status
 		then putStrLn ""
 		else putStrLn ""
-	let pexp = parse expr "" "path = 'cool' && size = 456 && permissions.read = 'true'"
 	let obj = makeObj
-				[("path", JSString $ toJSString "cool"),
-				("size", JSString $ toJSString "456"),
-				("permissions", makeObj
-					[("read", JSString $ toJSString "true")])]
+		[("path", JSString $ toJSString "cool"),
+		("size", JSString $ toJSString "456"),
+		("permissions", makeObj
+			[("read", JSString $ toJSString "true")])]
+	case parse ((,) <$> expr <*> getInput) "" "path = 'cool' && size = 456 && permissions.read = 'true'" of
+		Right (pexp, "") -> print pexp
+		Right (_, rest) -> error $ "Unconsumed input: " ++ rest
+		Left e -> error $ show e
 	print 5
