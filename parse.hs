@@ -16,16 +16,19 @@ import Text.JSON
 
 import Schema
 
--- Parsing
+-- Expressions
 
-data LValue = LKeyPath KeyPath | Command String KeyPath deriving (Eq, Show)
-data RValue = RString String | RKeyPath KeyPath deriving (Eq, Show)
+data LValue = LKeyPath KeyPath | Command String KeyPath deriving Show
+data RValue = RString String | RKeyPath KeyPath deriving Show
 
-data EqOp l v = Equal l v | Greater l v | Less l v deriving (Eq, Show)
-data Expr l v = And (Expr l v) (Expr l v) | Or (Expr l v) (Expr l v) | Op (EqOp l v) deriving (Eq, Show)
+data EqOp l v = Equal l v | Greater l v | Less l v deriving Show
+data Expr l v = And (Expr l v) (Expr l v) | Or (Expr l v) (Expr l v) | Op (EqOp l v) deriving Show
 
 foldExpr :: Expr l v -> (EqOp l v -> EqOp l' v') -> Expr l' v'
-foldExpr (And l v) f = undefined
+foldExpr (Op op) f = Op $ f op
+foldExpr (And l r) f = And (foldExpr l f) (foldExpr r f)
+
+-- Parsing
 
 lexer = T.makeTokenParser emptyDef {
 	identLetter = char '.' <|> alphaNum,
