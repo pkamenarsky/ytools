@@ -42,6 +42,8 @@ lookupKP _ _ = Left $ "Invalid keypath"
 -- in later versions), i.e: cmpFn :: LValue -> RValue -> (JSObject -> Ordering)
 -- cmpFn is going to be useful for ysort, ygroup etc too.
 
+-- Schemaless cmpFn?
+
 cmpFn :: TypeEnum -> String -> (String -> Ordering) -- (JSValue -> Ordering)
 cmpFn StringType s = \s' -> compare s s'
 -- cmpFn IntType s = let i = read s :: Int in p where
