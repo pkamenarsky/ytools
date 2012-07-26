@@ -1,5 +1,3 @@
-{-# LANGUAGE MultiParamTypeClasses #-}
-
 import Control.Applicative hiding ((<|>))
 import Control.Monad
 
@@ -15,6 +13,8 @@ import Text.ParserCombinators.Parsec.Language
 import qualified Text.ParserCombinators.Parsec.Token as T
 
 import Text.JSON
+
+import Schema
 
 -- Units
 

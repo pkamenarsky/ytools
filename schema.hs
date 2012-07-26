@@ -1,5 +1,4 @@
-{-# LANGUAGE ExistentialQuantification #-}
-{-# LANGUAGE DeriveDataTypeable #-}
+module Schema where
 
 import Control.Monad
 
@@ -9,7 +8,7 @@ import Data.Typeable
 data TypeEnum = IntType | FloatType | BoolType | DateType | StringType deriving (Enum, Show, Eq)
 
 data LValue = LValue KeyPath TypeEnum
-data RValue = RValue String
+data RValue = RString String | RKeyPath KeyPath TypeEnum
 
 type KeyPath = [String]
 
