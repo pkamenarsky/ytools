@@ -6,6 +6,11 @@ import Control.Monad
 import Data.Data
 import Data.Typeable
 
+data TypeEnum = IntType | FloatType | BoolType | DateType | StringType deriving (Enum, Show, Eq)
+
+data LValue = LValue KeyPath TypeEnum
+data RValue = RValue String
+
 type KeyPath = [String]
 
 data Schema = Object [(String, Schema)] |
@@ -32,25 +37,17 @@ lookupKP (Object fields) (x:xs) = case lookup x fields of
 	_ -> Left $ "No field " ++ x ++ " found in object"
 lookupKP _ _ = Left $ "Invalid keypath"
 
-data TypeEnum = IntType | FloatType | BoolType | DateType | StringType deriving (Enum, Show, Eq)
-data Value = forall a. Type a => Value a
+-- Would be better if cmpFn took an LValue and an RValue and produced a function that
+-- extracts the LValue from a js object and then compares it to the RValue (could be a keypath
+-- in later versions), i.e: cmpFn :: LValue -> RValue -> (JSObject -> Ordering)
+-- cmpFn is going to be useful for ysort, ygroup etc too.
 
-data Value2 = IntValue Int | StringValue String deriving (Eq, Ord, Data, Typeable)
+cmpFn :: TypeEnum -> String -> (String -> Ordering) -- (JSValue -> Ordering)
+cmpFn StringType s = \s' -> compare s s'
+-- cmpFn IntType s = let i = read s :: Int in p where
+-- 		p (JSInteger i') = compare i i'
+-- 		p _ = error "Type mismatch"
+cmpFn IntType s = let i = read s :: Int in \s' -> compare i $ read s'
+cmpFn FloatType s = let f = read s :: Float in \s' -> compare f $ read s'
+cmpFn t s = error $ "Type mismatch: " ++ s ++ " is not a " ++ show t
 
-class Ord a => Type a where
-	valueType :: a -> TypeEnum
-
-instance Type Int where
-	valueType _ = IntType
-
-instance Type Bool where
-	valueType _ = BoolType
-
-compareTypes :: Value -> Value -> Bool
-compareTypes (Value a) (Value b) = valueType a == valueType b
-
-compareValues :: Value -> Value -> Ordering
-compareValues (Value a) (Value b) = undefined
-
-produce :: Value
-produce = Value (6 :: Int)
