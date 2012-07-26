@@ -21,12 +21,17 @@ import Schema
 data LValue = LKeyPath KeyPath | Command String KeyPath deriving Show
 data RValue = RString String | RKeyPath KeyPath deriving Show
 
-data EqOp l v = Equal l v | Greater l v | Less l v deriving Show
-data Expr l v = And (Expr l v) (Expr l v) | Or (Expr l v) (Expr l v) | Op (EqOp l v) deriving Show
+-- We could have just defined Expr l v instead of going through Term but then we wouldn't be able
+-- to make a functor out of it.
+data Term l v = Term l v deriving show
+data Expr t = And (Expr t) (Expr t) | Or (Expr t) (Expr t) | Equal t | Greater t | Less t deriving Show
 
-foldExpr :: Expr l v -> (EqOp l v -> EqOp l' v') -> Expr l' v'
-foldExpr (Op op) f = Op $ f op
-foldExpr (And l r) f = And (foldExpr l f) (foldExpr r f)
+instance Functor Expr where
+	fmap f (Equal t) = Equal $ f t
+	fmap f (Greater t) = Greater $ f t
+	fmap f (Less t) = Less $ f t
+	fmap f (And l r) = And (fmap f l) (fmap f r)
+	fmap f (Or l r) = Or (fmap f l) (fmap f r)
 
 -- Parsing
 
@@ -51,13 +56,13 @@ rvalue :: Parser RValue
 rvalue = RString <$> lexeme (many1 (oneOf ":.,-" <|> alphaNum)) <|>
 	RString <$> lexeme (between (char '\'') (char '\'') (many1 $ satisfy (/= '\'')))
 
-parseEq :: (LValue -> RValue -> (EqOp LValue RValue)) -> String -> Parser (Expr LValue RValue)
-parseEq ctr opstr = Op <$> (ctr <$> lvalue <* reservedOp opstr <*> rvalue)
+parseEq :: (Term LValue RValue -> Expr t) -> String -> Parser (Expr t)
+parseEq ctr opstr = ctr <$> (Term <$> lvalue <* reservedOp opstr <*> rvalue)
 
 parseOp :: String -> a -> Parser a
 parseOp str ctr = reservedOp str >> return ctr
 
-expr :: Parser (Expr LValue RValue)
+expr :: Parser (Expr (Term LValue RValue))
 expr = chainl1 (parens expr <|>
 	(try (parseEq Equal "==") <|>
 		parseEq Equal "=") <|>
