@@ -1,6 +1,8 @@
 import Control.Applicative hiding ((<|>))
 import Control.Monad
 
+import qualified Data.Foldable as F
+
 import System.Environment
 
 import System.Posix.Files
@@ -21,17 +23,18 @@ import Schema
 data LValue = LKeyPath KeyPath | Command String KeyPath deriving Show
 data RValue = RString String | RKeyPath KeyPath deriving Show
 
--- We could have just defined Expr l v instead of going through Term but then we wouldn't be able
--- to make a functor out of it.
-data Term l v = Term l v deriving show
-data Expr t = And (Expr t) (Expr t) | Or (Expr t) (Expr t) | Equal t | Greater t | Less t deriving Show
+data Term l r = And (Term l r) (Term l r) | Or (Term l r) (Term l r) | Equal l r | Greater l r | Less l r deriving Show
+data Expr t = Expr t deriving Show
 
 instance Functor Expr where
-	fmap f (Equal t) = Equal $ f t
-	fmap f (Greater t) = Greater $ f t
-	fmap f (Less t) = Less $ f t
-	fmap f (And l r) = And (fmap f l) (fmap f r)
-	fmap f (Or l r) = Or (fmap f l) (fmap f r)
+	fmap f (Expr t) = Expr $ f t
+
+instance F.Foldable Expr where
+	foldr f b (Expr a) = f a b
+
+instance Applicative Expr where
+	pure = Expr
+	(<*>) (Expr f) (Expr a) = Expr $ f a
 
 -- Parsing
 
@@ -56,11 +59,11 @@ rvalue :: Parser RValue
 rvalue = RString <$> lexeme (many1 (oneOf ":.,-" <|> alphaNum)) <|>
 	RString <$> lexeme (between (char '\'') (char '\'') (many1 $ satisfy (/= '\'')))
 
-parseEq :: (Term LValue RValue -> Expr t) -> String -> Parser (Expr t)
-parseEq ctr opstr = ctr <$> (Term <$> lvalue <* reservedOp opstr <*> rvalue)
+parseEq :: (LValue -> RValue -> Term LValue RValue) -> String -> Parser (Expr (Term LValue RValue))
+parseEq ctr opstr = Expr <$> (ctr <$> lvalue <* reservedOp opstr <*> rvalue)
 
-parseOp :: String -> a -> Parser a
-parseOp str ctr = reservedOp str >> return ctr
+parseOp :: String -> (l -> r -> r') -> Parser (Expr l -> Expr r -> Expr r')
+parseOp str ctr = reservedOp str >> return (liftA2 ctr)
 
 expr :: Parser (Expr (Term LValue RValue))
 expr = chainl1 (parens expr <|>
@@ -71,6 +74,7 @@ expr = chainl1 (parens expr <|>
 	(parseOp "&&" And <|> parseOp "||" Or)
 
 -- Evaluation
+
 
 -- extractValue :: JSValue -> LValue -> Either String String
 -- extractValue (JSObject obj) (LKeyPath [key]) = case valFromObj key obj of
