@@ -46,10 +46,16 @@ safeRead rf msg str = case [x | (x, t) <- rf str, ("", "") <- lex t] of
 	_ -> Left $ str ++ " not a " ++ msg
 
 compareJSValues :: JSValue -> JSValue -> Either String Ordering
-compareJSValues = undefined
+compareJSValues (JSRational _ a) (JSRational _ b) = Right $ compare a b
+compareJSValues (JSBool a) (JSBool b) = Right $ compare a b
+compareJSValues (JSString a) (JSString b) = Right $ compare a b
+compareJSValues a b = Left $ "Type mismatch: " ++ show a ++ " - " ++ show b
 
-extractJSValue :: TypeEnum -> KeyPath -> JSValue -> Either String JSValue
-extractJSValue = undefined
+extractJSValue :: KeyPath -> JSValue -> Either String JSValue
+extractJSValue [] _ = Left "Extracting value failed: keypath exhausted"
+extractJSValue (key:keys) (JSObject obj) = case valFromObj key obj of
+	Ok r -> if null keys then Right r else extractJSValue keys r
+	_ -> Left $ "Extracting value failed: " ++ key
 
 stringToJSValue :: TypeEnum -> String -> Either String JSValue
 stringToJSValue IntType str = JSRational True <$> safeRead readFloat "int" str
