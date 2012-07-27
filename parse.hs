@@ -73,6 +73,21 @@ expr = chainl1 (parens expr <|>
 	parseEq Less "<")
 	(parseOp "&&" And <|> parseOp "||" Or)
 
+-- Typing
+
+typifyTerm :: (Typed LValue -> Typed RValue -> a) -> LValue -> RValue -> Schema -> Either String a
+typifyTerm ctr l@(LKeyPath kp) r@(RString str) schema = case lookupType schema kp of
+	Right t -> Right $ ctr (Typed t l) (Typed t r)
+	Left e -> Left e
+typifyTerm ctr _ _ schema = error "Unsupported lvalue or rvalue"
+
+typify :: Schema -> Term LValue RValue -> Either String (Term (Typed LValue) (Typed RValue))
+typify schema (Equal l r) = typifyTerm Equal l r schema
+typify schema (Less l r) = typifyTerm Less l r schema
+typify schema (Greater l r) = typifyTerm Greater l r schema
+typify schema (And l r) = And <$> typify schema l <*> typify schema r
+typify schema (Or l r) = Or <$> typify schema l <*> typify schema r
+
 -- Evaluation
 
 
@@ -119,9 +134,9 @@ main = do
 		[("path", JSString $ toJSString "cool"),
 		("size", JSString $ toJSString "456"),
 		("permissions", makeObj
-			[("read", JSString $ toJSString "true")])]
-	case parse ((,) <$> expr <*> getInput) "" "path = 'cool' && size = 456 && permissions.read = 'true'" of
-		Right (pexp, "") -> print pexp
+			[("oread", JSString $ toJSString "true")])]
+	case parse ((,) <$> expr <*> getInput) "" "patha = 'cool' && size = 456 && permissions.oread = 'true'" of
+		Right (pexp, "") -> print $ fmap (typify lsSchema) pexp
 		Right (_, rest) -> error $ "Unconsumed input: " ++ rest
 		Left e -> error $ show e
 	print 5

@@ -9,7 +9,7 @@ import Data.Typeable
 import Text.JSON
 
 data TypeEnum = IntType | FloatType | BoolType | DateType | StringType deriving (Enum, Show, Eq)
-data Typed a = Typed TypeEnum a
+data Typed a = Typed TypeEnum a deriving Show
 
 type KeyPath = [String]
 
@@ -19,6 +19,7 @@ data Schema = Object [(String, Schema)] |
 
 lsSchema = Object [
 	("path", Field StringType),
+	("size", Field IntType),
 	("subdirs", Array lsSchema),
 	("permissions", Object [
 		("oread", Field BoolType)])]
