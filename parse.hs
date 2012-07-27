@@ -23,18 +23,7 @@ import Schema
 data LValue = LKeyPath KeyPath | Command String KeyPath deriving Show
 data RValue = RString String | RKeyPath KeyPath deriving Show
 
-data Term l r = And (Term l r) (Term l r) | Or (Term l r) (Term l r) | Equal l r | Greater l r | Less l r deriving Show
-data Expr t = Expr t deriving Show
-
-instance Functor Expr where
-	fmap f (Expr t) = Expr $ f t
-
-instance F.Foldable Expr where
-	foldr f b (Expr a) = f a b
-
-instance Applicative Expr where
-	pure = Expr
-	(<*>) (Expr f) (Expr a) = Expr $ f a
+data Expr l r = And (Expr l r) (Expr l r) | Or (Expr l r) (Expr l r) | Equal l r | Greater l r | Less l r deriving Show
 
 -- Parsing
 
@@ -59,13 +48,13 @@ rvalue :: Parser RValue
 rvalue = RString <$> lexeme (many1 (oneOf ":.,-" <|> alphaNum)) <|>
 	RString <$> lexeme (between (char '\'') (char '\'') (many1 $ satisfy (/= '\'')))
 
-parseEq :: (LValue -> RValue -> Term LValue RValue) -> String -> Parser (Expr (Term LValue RValue))
-parseEq ctr opstr = Expr <$> (ctr <$> lvalue <* reservedOp opstr <*> rvalue)
+parseEq :: (LValue -> RValue -> Expr LValue RValue) -> String -> Parser (Expr LValue RValue)
+parseEq ctr opstr = ctr <$> lvalue <* reservedOp opstr <*> rvalue
 
-parseOp :: String -> (l -> r -> r') -> Parser (Expr l -> Expr r -> Expr r')
-parseOp str ctr = reservedOp str >> return (liftA2 ctr)
+parseOp :: String -> a -> Parser a
+parseOp str ctr = reservedOp str >> return ctr
 
-expr :: Parser (Expr (Term LValue RValue))
+expr :: Parser (Expr LValue RValue)
 expr = chainl1 (parens expr <|>
 	(try (parseEq Equal "==") <|>
 		parseEq Equal "=") <|>
@@ -75,16 +64,16 @@ expr = chainl1 (parens expr <|>
 
 -- Typing
 
-typifyTerm :: (Typed LValue -> Typed RValue -> a) -> LValue -> RValue -> Schema -> Either String a
-typifyTerm ctr l@(LKeyPath kp) r@(RString str) schema = case lookupType schema kp of
+typifyExpr :: (Typed LValue -> Typed RValue -> a) -> LValue -> RValue -> Schema -> Either String a
+typifyExpr ctr l@(LKeyPath kp) r@(RString str) schema = case lookupType schema kp of
 	Right t -> Right $ ctr (Typed t l) (Typed t r)
 	Left e -> Left e
-typifyTerm ctr _ _ schema = error "Unsupported lvalue or rvalue"
+typifyExpr ctr _ _ schema = error "Unsupported lvalue or rvalue"
 
-typify :: Schema -> Term LValue RValue -> Either String (Term (Typed LValue) (Typed RValue))
-typify schema (Equal l r) = typifyTerm Equal l r schema
-typify schema (Less l r) = typifyTerm Less l r schema
-typify schema (Greater l r) = typifyTerm Greater l r schema
+typify :: Schema -> Expr LValue RValue -> Either String (Expr (Typed LValue) (Typed RValue))
+typify schema (Equal l r) = typifyExpr Equal l r schema
+typify schema (Less l r) = typifyExpr Less l r schema
+typify schema (Greater l r) = typifyExpr Greater l r schema
 typify schema (And l r) = And <$> typify schema l <*> typify schema r
 typify schema (Or l r) = Or <$> typify schema l <*> typify schema r
 
@@ -136,7 +125,7 @@ main = do
 		("permissions", makeObj
 			[("oread", JSString $ toJSString "true")])]
 	case parse ((,) <$> expr <*> getInput) "" "patha = 'cool' && size = 456 && permissions.oread = 'true'" of
-		Right (pexp, "") -> print $ fmap (typify lsSchema) pexp
+		Right (pexp, "") -> print $ typify lsSchema pexp
 		Right (_, rest) -> error $ "Unconsumed input: " ++ rest
 		Left e -> error $ show e
 	print 5
