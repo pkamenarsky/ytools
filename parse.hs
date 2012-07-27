@@ -25,6 +25,11 @@ data RValue = RString String | RKeyPath KeyPath deriving Show
 
 data Expr l r = And (Expr l r) (Expr l r) | Or (Expr l r) (Expr l r) | Equal l r | Greater l r | Less l r deriving Show
 
+mapExpr :: (Expr l r -> Either String (Expr l' r')) -> Expr l r -> Either String (Expr l' r')
+mapExpr f (And l r) = And <$> mapExpr f l <*> mapExpr f r
+mapExpr f (Or l r) = Or <$> mapExpr f l <*> mapExpr f r
+mapExpr f t = f t
+
 -- Parsing
 
 lexer = T.makeTokenParser emptyDef {
@@ -64,18 +69,17 @@ expr = chainl1 (parens expr <|>
 
 -- Typing
 
-typifyExpr :: (Typed LValue -> Typed RValue -> a) -> LValue -> RValue -> Schema -> Either String a
+typifyExpr :: (Typed LValue -> JSValue -> a) -> LValue -> RValue -> Schema -> Either String a
 typifyExpr ctr l@(LKeyPath kp) r@(RString str) schema = case lookupType schema kp of
-	Right t -> Right $ ctr (Typed t l) (Typed t r)
+	Right t -> ctr (Typed t l) <$> stringToJSValue t str
 	Left e -> Left e
 typifyExpr ctr _ _ schema = error "Unsupported lvalue or rvalue"
 
-typify :: Schema -> Expr LValue RValue -> Either String (Expr (Typed LValue) (Typed RValue))
-typify schema (Equal l r) = typifyExpr Equal l r schema
-typify schema (Less l r) = typifyExpr Less l r schema
-typify schema (Greater l r) = typifyExpr Greater l r schema
-typify schema (And l r) = And <$> typify schema l <*> typify schema r
-typify schema (Or l r) = Or <$> typify schema l <*> typify schema r
+typify :: Schema -> Expr LValue RValue -> Either String (Expr (Typed LValue) JSValue)
+typify schema = mapExpr convert where
+	convert (Equal l r) = typifyExpr Equal l r schema
+	convert (Less l r) = typifyExpr Less l r schema
+	convert (Greater l r) = typifyExpr Greater l r schema
 
 -- Evaluation
 
@@ -121,10 +125,10 @@ main = do
 		else putStrLn ""
 	let obj = makeObj
 		[("path", JSString $ toJSString "cool"),
-		("size", JSString $ toJSString "456"),
+		("size", JSRational True 456),
 		("permissions", makeObj
-			[("oread", JSString $ toJSString "true")])]
-	case parse ((,) <$> expr <*> getInput) "" "patha = 'cool' && size = 456 && permissions.oread = 'true'" of
+			[("oread", JSBool True)])]
+	case parse ((,) <$> expr <*> getInput) "" "path = 'cool' && size = 456 && permissions.oread = 'true'" of
 		Right (pexp, "") -> print $ typify lsSchema pexp
 		Right (_, rest) -> error $ "Unconsumed input: " ++ rest
 		Left e -> error $ show e

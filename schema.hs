@@ -1,5 +1,7 @@
 module Schema where
 
+import Numeric
+
 import Control.Applicative
 import Control.Monad
 
@@ -38,8 +40,8 @@ lookupType (Object fields) (x:xs) = case lookup x fields of
 	_ -> Left $ "No field " ++ x ++ " found in object"
 lookupType _ _ = Left $ "Invalid keypath"
 
-readMaybe :: (Read a) => String -> String -> Either String a
-readMaybe str msg =  case [x | (x, t) <- reads str, ("", "") <- lex t] of
+safeRead :: (Read a) => (String -> [(a, String)]) -> String -> String -> Either String a
+safeRead rf msg str = case [x | (x, t) <- rf str, ("", "") <- lex t] of
 	[x] -> Right x
 	_ -> Left $ str ++ " not a " ++ msg
 
@@ -50,4 +52,9 @@ extractJSValue :: TypeEnum -> KeyPath -> JSValue -> Either String JSValue
 extractJSValue = undefined
 
 stringToJSValue :: TypeEnum -> String -> Either String JSValue
-stringToJSValue = undefined
+stringToJSValue IntType str = JSRational True <$> safeRead readFloat "int" str
+stringToJSValue BoolType "true" = Right $ JSBool True
+stringToJSValue BoolType "false" = Right $ JSBool False
+stringToJSValue BoolType str = JSBool <$> safeRead read "bool" str
+stringToJSValue StringType str = Right $ JSString $ toJSString str
+
