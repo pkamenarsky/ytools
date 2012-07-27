@@ -83,22 +83,16 @@ typify schema = mapExpr convert where
 
 -- Evaluation
 
+cmp :: Ordering -> KeyPath -> JSValue -> JSValue -> Either String Bool
+cmp ord kp jsvalue value = (== ord) <$> (extractJSValue kp value >>= compareJSValues jsvalue)
 
--- extractValue :: JSValue -> LValue -> Either String String
--- extractValue (JSObject obj) (LKeyPath [key]) = case valFromObj key obj of
-	-- Ok v -> Right v
-	-- _ -> Left $ "Extracting value failed: " ++ key
--- extractValue (JSObject obj) (LKeyPath (key:keys)) = case valFromObj key obj of
-	-- Ok obj' -> extractValue obj' (LKeyPath keys)
-	-- _ -> Left $ "Extracting value failed: " ++ key
--- 
--- eval :: JSValue -> Expr -> (String -> Ordering) -> Either String Bool
--- eval obj (Equal e1 e2) cmpFn = case cmpFn <$> extractValue obj e1 of
-	-- Right ord -> Right $ EQ == ord
-	-- Left e -> Left e
--- eval obj (And s1 s2) cmpFn = (&&) <$> eval obj s1 cmpFn <*> eval obj s2 cmpFn
--- eval obj (Or s1 s2) cmpFn = (||) <$> eval obj s1 cmpFn <*> eval obj s2 cmpFn
--- 
+eval :: (Expr (Typed LValue) JSValue) -> JSValue -> Either String Bool
+eval (And l r) value = (&&) <$> eval l value <*> eval r value
+eval (Or l r) value = (||) <$> eval l value <*> eval r value
+eval (Equal (Typed t (LKeyPath kp)) jsvalue) value = cmp EQ kp jsvalue value
+eval (Greater (Typed t (LKeyPath kp)) jsvalue) value = cmp GT kp jsvalue value
+eval (Less (Typed t (LKeyPath kp)) jsvalue) value = cmp LT kp jsvalue value
+
 -- makeEvalFn :: Schema -> Expr -> (JSValue -> Either String Bool)
 -- makeEvalFn schema (Equal e1 e2) = let f = cmpFn schema e1 e2 in
 	-- \value -> case f <$> extractValue value e1 of
@@ -129,7 +123,9 @@ main = do
 		("permissions", makeObj
 			[("oread", JSBool True)])]
 	case parse ((,) <$> expr <*> getInput) "" "path = 'cool' && size = 456 && permissions.oread = 'true'" of
-		Right (pexp, "") -> print $ typify lsSchema pexp
+		Right (pexp, "") -> print $ do
+			texp <- typify lsSchema pexp
+			eval texp obj
 		Right (_, rest) -> error $ "Unconsumed input: " ++ rest
 		Left e -> error $ show e
 	print 5

@@ -61,6 +61,6 @@ stringToJSValue :: TypeEnum -> String -> Either String JSValue
 stringToJSValue IntType str = JSRational True <$> safeRead readFloat "int" str
 stringToJSValue BoolType "true" = Right $ JSBool True
 stringToJSValue BoolType "false" = Right $ JSBool False
-stringToJSValue BoolType str = JSBool <$> safeRead read "bool" str
+stringToJSValue BoolType str = JSBool <$> safeRead reads "bool" str
 stringToJSValue StringType str = Right $ JSString $ toJSString str
 
