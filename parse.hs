@@ -92,6 +92,7 @@ eval (Or l r) value = (||) <$> eval l value <*> eval r value
 eval (Equal (Typed t (LKeyPath kp)) jsvalue) value = cmp EQ kp jsvalue value
 eval (Greater (Typed t (LKeyPath kp)) jsvalue) value = cmp GT kp jsvalue value
 eval (Less (Typed t (LKeyPath kp)) jsvalue) value = cmp LT kp jsvalue value
+eval _ _ = Left "Unsupported expression"
 
 -- makeEvalFn :: Schema -> Expr -> (JSValue -> Either String Bool)
 -- makeEvalFn schema (Equal e1 e2) = let f = cmpFn schema e1 e2 in
