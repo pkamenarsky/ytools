@@ -2,4 +2,10 @@
 
 import Gen
 
-main = print $(listFields ''FileString)
+import Language.Haskell.TH
+import Language.Haskell.TH.Syntax
+
+fsSchema = $(listFields ''FileString)
+
+main = do
+	print fsSchema

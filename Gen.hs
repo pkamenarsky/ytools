@@ -31,46 +31,17 @@ data FileType = FileType {
 	subdirs :: [FileType],
 	permissions ::Permissions
 } deriving (Data, Typeable, Show) 
-
-ft = FileType "asd" [] (Permissions False True True)
-
-f :: Data a => a -> String
-f d = (concat $ gmapQ f d) ++ (show $ dataTypeOf d)
-
-main2 = do
-	let	dt = dataTypeOf (undefined :: FileType)
-		tt = typeOf FileType
-		ctr = head $ dataTypeConstrs dt
-		ctrType = constrType ctr
-		fields = constrFields ctr
-	-- print (cast ft :: Maybe FileType)
-	-- print $ gmapQ f ft
-	-- print $ constrType ctr
-	-- print $ typeRepTyCon tt
-	-- print $ typeRepArgs tt
-	let AlgRep [c] = dataTypeRep ctrType
-	print $ typeRepArgs tt
-	print $ typeRepArgs $ head $ tail $ typeRepArgs tt
-	print $ typeOf FileString == typeOf (undefined :: String -> FileString)
-
-stype = typeOf (undefined :: String)
-itype = typeOf (undefined :: Int)
-
-unfoldType :: Typeable a => a -> [TypeRep]
-unfoldType a = unfoldr (\t -> case t of
-	[] -> Nothing
-	[x, xs] -> Just (x, typeRepArgs xs)) (typeRepArgs $ typeOf a)
-
--- gen :: Typeable a => a -> Schema
-gen a = map (\t -> case t of
-	x -> field x where
-		field t
-			| t == typeOf (undefined :: String) = Field StringType
-			| t == typeOf (undefined :: Int) = Field IntType
-			| otherwise = error "sry :(") (unfoldType a)
 	
-data FileString = FileString {address :: String} deriving (Data, Typeable)
-data FileInt = FileInt Int String Int deriving (Data, Typeable)
+data FileString = FileString {address :: String, age :: [Int], fi :: FileInt} deriving (Data, Typeable)
+data FileInt = FileInt {something::String} deriving (Data, Typeable)
+
+fieldType :: Type -> Q Exp
+fieldType (ConT name)
+	| name == ''String = [| Field StringType |]
+	| name == ''Bool = [| Field BoolType |]
+	| name == ''Int = [| Field IntType |]
+	| otherwise = listFields name
+fieldType (AppT ListT typ) = [| Array $(fieldType typ) |]
 
 listFields :: Name -> Q Exp
 listFields name = do
@@ -78,5 +49,8 @@ listFields name = do
 	let fields = case rf of
 		TyConI (DataD _ _ _ [RecC _ fields] _) -> fields
 		a -> error $ show a
-	let names = map (\(name,_,_) -> name) fields
-	stringE $ show names
+	let names = map (\(name, _, typ) -> typ) fields
+	let specs = listE $ map (\(name, _, typ) -> let sn = nameBase name in [| (sn, $(fieldType typ)) |]) fields
+	[| Object $specs |]
+	--stringE $ show names
+
